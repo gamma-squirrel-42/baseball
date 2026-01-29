@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>運動資訊統整器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #f3f4f6;
+            padding-bottom: 100px;
+        }
+        
+        .bg-primary { background-color: #6D3D22; }
+        .text-primary { color: #6D3D22; }
+        .active-tab { color: #6D3D22; }
+        
+        /* 色號定義 */
+        .text-team-main { color: #FFA51F; }
+        .bg-team-main { background-color: #FFA51F; }
+        .bg-team-light { background-color: rgba(255, 165, 31, 0.5); }
+        
+        .text-match-main { color: #66892F; }
+        .bg-match-main { background-color: #66892F; }
+        .bg-match-light { background-color: rgba(102, 137, 47, 0.5); }
+
+        .text-self-main { color: #E28D90; }
+        .bg-self-main { background-color: #E28D90; }
+
+        .hidden { display: none; }
+        
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .fab {
+            position: fixed;
+            bottom: 100px;
+            right: 20px;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            z-index: 50;
+            transition: transform 0.2s;
+        }
+        .fab:active { transform: scale(0.9); }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 60;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        /* 圖片放大檢視器 */
+        #image-viewer {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 100;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            cursor: zoom-out;
+        }
+        #image-viewer img {
+            max-width: 95%;
+            max-height: 95%;
+            object-fit: contain;
+        }
+
+        .img-preview-container {
+            width: 100%;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            cursor: zoom-in;
+        }
+
+        /* 日曆格子的特殊底色 */
+        .cal-bg-team { background-color: rgba(255, 165, 31, 0.5); }
+        .cal-bg-match { background-color: rgba(102, 137, 47, 0.5); }
+        /* 雙行程底色：上下平分 */
+        .cal-bg-both { 
+            background: linear-gradient(to bottom, rgba(255, 165, 31, 0.5) 50%, rgba(102, 137, 47, 0.5) 50%); 
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header id="main-header" class="bg-primary text-white p-4 sticky top-0 z-10 shadow-md flex justify-between items-center">
+        <div class="w-6"></div>
+        <h1 id="page-title" class="text-xl font-bold text-center">總覽</h1>
+        <div class="text-[10px] opacity-70 text-right">本地儲存<br>全能版</div>
+    </header>
+
+    <main class="p-4 space-y-6">
+        <!-- 總覽分頁 -->
+        <section id="section-overview" class="space-y-4">
+            <!-- 賽訓簡覽日曆 -->
+            <div class="bg-white rounded-xl p-4 shadow-sm">
+                <h2 class="font-bold mb-4 flex items-center justify-between text-primary">
+                    <span class="flex items-center"><i data-lucide="calendar" class="w-5 h-5 mr-2"></i> 本週賽訓簡覽</span>
+                    <span id="current-month" class="text-xs text-gray-400 font-normal"></span>
+                </h2>
+                <div class="grid grid-cols-7 gap-1 text-center" id="week-calendar-grid"></div>
+                <div class="flex justify-center mt-4 space-x-4 text-[10px]">
+                    <div class="flex items-center"><span class="w-3 h-3 bg-team-light rounded-sm mr-1"></span>球隊</div>
+                    <div class="flex items-center"><span class="w-3 h-3 bg-match-light rounded-sm mr-1"></span>比賽</div>
+                </div>
+            </div>
+
+            <!-- 近期球隊訓練 -->
+            <div class="bg-white rounded-xl p-4 shadow-sm border-l-4 border-team-main">
+                <h3 class="font-bold mb-3 flex items-center text-team-main">
+                    <i data-lucide="users" class="w-4 h-4 mr-2"></i> 近期球隊訓練
+                </h3>
+                <div id="overview-team-list" class="space-y-2 text-sm"></div>
+            </div>
+
+            <!-- 近期賽程 -->
+            <div class="bg-white rounded-xl p-4 shadow-sm border-l-4 border-match-main">
+                <h3 class="font-bold mb-3 flex items-center text-match-main">
+                    <i data-lucide="trophy" class="w-4 h-4 mr-2"></i> 近期賽程
+                </h3>
+                <div id="overview-match-list" class="space-y-2 text-sm"></div>
+            </div>
+
+            <!-- 最新課表 -->
+            <div class="bg-white rounded-xl p-4 shadow-sm border-l-4 border-self-main">
+                <h3 class="font-bold mb-3 flex items-center text-self-main">
+                    <i data-lucide="dumbbell" class="w-4 h-4 mr-2"></i> 最新自主訓練
+                </h3>
+                <div id="overview-self-list" class="space-y-2 text-sm"></div>
+            </div>
+        </section>
+
+        <!-- 球隊訓練分頁 -->
+        <section id="section-team" class="hidden space-y-4">
+            <div id="team-list" class="space-y-3"></div>
+        </section>
+
+        <!-- 比賽賽程分頁 -->
+        <section id="section-match" class="hidden space-y-4">
+            <div id="match-list" class="space-y-3"></div>
+        </section>
+
+        <!-- 自主訓練分頁 -->
+        <section id="section-self" class="hidden space-y-4">
+            <div id="self-training-records" class="space-y-4"></div>
+        </section>
+    </main>
+
+    <!-- FAB -->
+    <button id="main-fab" onclick="openAddModal()" class="fab bg-primary hidden">
+        <i data-lucide="plus" class="w-8 h-8"></i>
+    </button>
+
+    <!-- Modals -->
+    <div id="modal-container" class="modal-overlay" onclick="closeModalOnOuterClick(event)">
+        <!-- Team Form -->
+        <div id="form-team" class="bg-white w-full max-w-sm rounded-2xl p-6 hidden animate-fade-in">
+            <h3 class="font-bold mb-4 text-team-main flex items-center text-lg"><i data-lucide="plus-circle" class="mr-2"></i>新增球隊訓練</h3>
+            <div class="space-y-4">
+                <div class="grid grid-cols-2 gap-2">
+                    <input type="date" id="team-date" class="border rounded-lg p-3 text-sm outline-none">
+                    <input type="time" id="team-time" class="border rounded-lg p-3 text-sm outline-none">
+                </div>
+                <input type="text" id="team-location" placeholder="訓練地點 (自動連動地圖)" class="w-full border rounded-lg p-3 outline-none">
+                <button onclick="addTeamTraining()" class="w-full bg-team-main text-white py-4 rounded-xl font-bold">儲存訓練</button>
+            </div>
+        </div>
+
+        <!-- Match Form -->
+        <div id="form-match" class="bg-white w-full max-w-sm rounded-2xl p-6 hidden animate-fade-in">
+            <h3 class="font-bold mb-4 text-match-main flex items-center text-lg"><i data-lucide="plus-circle" class="mr-2"></i>安排比賽賽程</h3>
+            <div class="space-y-4">
+                <div class="grid grid-cols-2 gap-2">
+                    <input type="date" id="match-date" class="border rounded-lg p-3 text-sm outline-none">
+                    <input type="time" id="match-time" class="border rounded-lg p-3 text-sm outline-none">
+                </div>
+                <input type="text" id="match-opponent" placeholder="對手球隊" class="w-full border rounded-lg p-3 outline-none">
+                <input type="text" id="match-location" placeholder="比賽地點 (自動連動地圖)" class="w-full border rounded-lg p-3 outline-none">
+                <button onclick="addMatch()" class="w-full bg-match-main text-white py-4 rounded-xl font-bold">儲存賽程</button>
+            </div>
+        </div>
+
+        <!-- Self Form -->
+        <div id="form-self" class="bg-white w-full max-w-sm rounded-2xl p-6 hidden animate-fade-in text-center">
+            <h3 class="font-bold mb-4 text-self-main text-lg">AI 智能提取日期標題</h3>
+            <input type="file" id="self-upload" accept="image/*" class="hidden" onchange="uploadTrainingImage(event)">
+            <label for="self-upload" class="flex flex-col items-center justify-center border-2 border-dashed border-red-100 rounded-xl p-10 cursor-pointer hover:bg-red-50">
+                <i data-lucide="camera" class="w-12 h-12 text-self-main mb-3"></i>
+                <span class="text-sm text-self-main font-bold">拍攝或選擇課表</span>
+            </label>
+            <div id="ai-processing" class="hidden mt-4 flex items-center justify-center p-3 bg-red-50 rounded-lg animate-pulse">
+                <div class="h-4 w-4 border-2 border-self-main border-t-transparent rounded-full animate-spin"></div>
+                <span class="ml-3 text-xs text-self-main font-bold">正在辨識日期...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 圖片檢視器 -->
+    <div id="image-viewer" onclick="closeImageViewer()">
+        <button class="absolute top-6 right-6 text-white bg-black/50 rounded-full p-2">
+            <i data-lucide="x" class="w-8 h-8"></i>
+        </button>
+        <img id="viewer-img" src="" alt="放大圖示" onclick="event.stopPropagation()">
+    </div>
+
+    <!-- Navigation -->
+    <nav class="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around items-center py-3 shadow-lg z-20">
+        <button onclick="switchTab('overview')" id="nav-overview" class="flex flex-col items-center active-tab">
+            <i data-lucide="layout-dashboard" class="w-6 h-6"></i>
+            <span class="text-[10px] mt-1 font-bold">總覽</span>
+        </button>
+        <button onclick="switchTab('team')" id="nav-team" class="flex flex-col items-center text-gray-400">
+            <i data-lucide="users" class="w-6 h-6"></i>
+            <span class="text-[10px] mt-1 font-bold">球隊訓練</span>
+        </button>
+        <button onclick="switchTab('match')" id="nav-match" class="flex flex-col items-center text-gray-400">
+            <i data-lucide="trophy" class="w-6 h-6"></i>
+            <span class="text-[10px] mt-1 font-bold">比賽賽程</span>
+        </button>
+        <button onclick="switchTab('self')" id="nav-self" class="flex flex-col items-center text-gray-400">
+            <i data-lucide="dumbbell" class="w-6 h-6"></i>
+            <span class="text-[10px] mt-1 font-bold">自主訓練</span>
+        </button>
+    </nav>
+
+    <script>
+        const apiKey = ""; 
+        const MODEL_NAME = "gemini-2.5-flash-preview-09-2025";
+
+        let teamSessions = JSON.parse(localStorage.getItem('teamSessions') || '[]');
+        let matches = JSON.parse(localStorage.getItem('matches') || '[]');
+        let selfTrainingLogs = JSON.parse(localStorage.getItem('selfTrainingLogs') || '[]');
+        let currentActiveTab = 'overview';
+
+        window.onload = () => {
+            lucide.createIcons();
+            refreshUI();
+        };
+
+        function refreshUI() {
+            renderTeamList();
+            renderMatchList();
+            renderSelfTrainingList();
+            renderWeekCalendar();
+            updateOverviewLists();
+            lucide.createIcons();
+        }
+
+        function saveData() {
+            localStorage.setItem('teamSessions', JSON.stringify(teamSessions));
+            localStorage.setItem('matches', JSON.stringify(matches));
+            localStorage.setItem('selfTrainingLogs', JSON.stringify(selfTrainingLogs));
+            refreshUI();
+        }
+
+        window.switchTab = (tab, scrollToId = null) => {
+            currentActiveTab = tab;
+            const sections = ['overview', 'team', 'self', 'match'];
+            const titles = { overview: '總覽', team: '球隊訓練', self: '自主訓練', match: '比賽賽程' };
+            const themeColors = { overview: '#6D3D22', team: '#FFA51F', match: '#66892F', self: '#E28D90' };
+            
+            sections.forEach(s => {
+                document.getElementById(`section-${s}`).classList.add('hidden');
+                document.getElementById(`nav-${s}`).classList.replace('active-tab', 'text-gray-400');
+            });
+
+            document.getElementById(`section-${tab}`).classList.remove('hidden');
+            document.getElementById(`nav-${tab}`).classList.replace('text-gray-400', 'active-tab');
+            document.getElementById(`page-title`).innerText = titles[tab];
+            document.getElementById('main-header').style.backgroundColor = themeColors[tab];
+            
+            const fab = document.getElementById('main-fab');
+            if (tab === 'overview') fab.classList.add('hidden');
+            else {
+                fab.classList.remove('hidden');
+                fab.style.backgroundColor = themeColors[tab];
+            }
+
+            if (scrollToId) {
+                setTimeout(() => {
+                    const el = document.getElementById(scrollToId);
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }, 100);
+            }
+        };
+
+        window.openAddModal = () => {
+            document.getElementById('modal-container').style.display = 'flex';
+            ['team', 'match', 'self'].forEach(f => document.getElementById(`form-${f}`).classList.add('hidden'));
+            document.getElementById(`form-${currentActiveTab}`).classList.remove('hidden');
+        };
+
+        window.closeAddModal = () => { document.getElementById('modal-container').style.display = 'none'; };
+        window.closeModalOnOuterClick = (e) => { if (e.target.id === 'modal-container') closeAddModal(); };
+
+        window.zoomImage = (src) => {
+            const viewer = document.getElementById('image-viewer');
+            document.getElementById('viewer-img').src = src;
+            viewer.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+        };
+        window.closeImageViewer = () => {
+            document.getElementById('image-viewer').style.display = 'none';
+            document.body.style.overflow = 'auto';
+        };
+
+        window.addTeamTraining = () => {
+            const date = document.getElementById('team-date').value;
+            const time = document.getElementById('team-time').value;
+            const loc = document.getElementById('team-location').value;
+            if (!date || !loc) return;
+            teamSessions.push({ id: Date.now().toString(), date, time, location: loc });
+            closeAddModal();
+            saveData();
+        };
+
+        window.addMatch = () => {
+            const date = document.getElementById('match-date').value;
+            const time = document.getElementById('match-time').value;
+            const opp = document.getElementById('match-opponent').value;
+            const loc = document.getElementById('match-location').value;
+            if (!date || !opp) return;
+            matches.push({ id: Date.now().toString(), date, time, opponent: opp, location: loc });
+            closeAddModal();
+            saveData();
+        };
+
+        window.uploadTrainingImage = async (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+            document.getElementById('ai-processing').classList.remove('hidden');
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const base64Data = e.target.result;
+                const base64Content = base64Data.split(',')[1];
+                let extractedDate = "無日期";
+                try {
+                    const payload = {
+                        contents: [{
+                            parts: [
+                                { text: "提取圖片上方日期(YYYY-MM-DD)，若無則回『無日期』，僅回答日期文字。" },
+                                { inlineData: { mimeType: "image/png", data: base64Content } }
+                            ]
+                        }]
+                    };
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const data = await res.json();
+                    extractedDate = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "無日期";
+                } catch (err) { console.error(err); }
+
+                selfTrainingLogs.unshift({
+                    id: Date.now().toString(),
+                    title: `[${extractedDate}] 教練課表`,
+                    imageUrl: base64Data,
+                    uploadTime: new Date().toLocaleString('zh-TW')
+                });
+                document.getElementById('ai-processing').classList.add('hidden');
+                closeAddModal();
+                saveData();
+            };
+            reader.readAsDataURL(file);
+        };
+
+        function renderTeamList() {
+            const list = document.getElementById('team-list');
+            list.innerHTML = teamSessions.sort((a,b)=>new Date(b.date)-new Date(a.date)).map(s => `
+                <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-team-main flex justify-between items-center animate-fade-in">
+                    <div>
+                        <div class="text-[10px] text-gray-400">${s.date} ${s.time || ''}</div>
+                        <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.location)}" target="_blank" class="font-bold flex items-center text-primary">
+                            <i data-lucide="map-pin" class="w-3 h-3 mr-1 text-team-main"></i> ${s.location}
+                        </a>
+                    </div>
+                    <button onclick="deleteItem('team', '${s.id}')" class="text-gray-300"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                </div>
+            `).join('');
+        }
+
+        function renderMatchList() {
+            const list = document.getElementById('match-list');
+            list.innerHTML = matches.sort((a,b)=>new Date(b.date)-new Date(a.date)).map(m => `
+                <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-match-main flex justify-between items-center animate-fade-in">
+                    <div class="space-y-1">
+                        <div class="text-[10px] text-gray-400">${m.date} ${m.time || ''}</div>
+                        <div class="font-bold text-match-main">VS ${m.opponent}</div>
+                        <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(m.location)}" target="_blank" class="text-xs text-gray-500 flex items-center">
+                            <i data-lucide="map-pin" class="w-3 h-3 mr-1 text-match-main"></i> ${m.location}
+                        </a>
+                    </div>
+                    <button onclick="deleteItem('match', '${m.id}')" class="text-gray-300"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                </div>
+            `).join('');
+        }
+
+        function renderSelfTrainingList() {
+            const container = document.getElementById('self-training-records');
+            container.innerHTML = selfTrainingLogs.map(log => `
+                <div id="self-card-${log.id}" class="bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-100 animate-fade-in">
+                    <div class="p-4 flex justify-between items-center bg-red-50/30">
+                        <h4 class="font-bold text-self-main">${log.title}</h4>
+                        <button onclick="deleteItem('self', '${log.id}')" class="text-red-200"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </div>
+                    <div class="p-3">
+                        <div class="img-preview-container" onclick="zoomImage('${log.imageUrl}')">
+                            <img src="${log.imageUrl}" class="w-full h-auto object-contain max-h-[500px]">
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateOverviewLists() {
+            const teamContainer = document.getElementById('overview-team-list');
+            const topTeams = teamSessions.sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,3);
+            teamContainer.innerHTML = topTeams.length ? topTeams.map(t=>`
+                <div class="flex justify-between py-1 border-b border-gray-50">
+                    <div class="flex flex-col">
+                       <span class="text-gray-500 text-[10px]">${t.date} ${t.time || ''}</span>
+                       <span class="font-medium">${t.location}</span>
+                    </div>
+                </div>
+            `).join('') : '<p class="text-gray-300 text-xs text-center py-2">暫無訓練</p>';
+
+            const matchContainer = document.getElementById('overview-match-list');
+            const topMatches = matches.sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,3);
+            matchContainer.innerHTML = topMatches.length ? topMatches.map(m=>`
+                <div class="flex justify-between py-1 border-b border-gray-50">
+                    <div class="flex flex-col">
+                        <span class="text-gray-500 text-[10px]">${m.date} ${m.time || ''}</span>
+                        <span class="text-match-main font-bold">VS ${m.opponent}</span>
+                    </div>
+                    <span class="text-[10px] text-gray-400 self-end">${m.location}</span>
+                </div>
+            `).join('') : '<p class="text-gray-300 text-xs text-center py-2">暫無賽程</p>';
+
+            const selfContainer = document.getElementById('overview-self-list');
+            const topSelf = selfTrainingLogs.slice(0,3);
+            selfContainer.innerHTML = topSelf.length ? topSelf.map(s=>`
+                <div onclick="switchTab('self', 'self-card-${s.id}')" class="py-2 px-3 bg-red-50 rounded-lg text-self-main font-medium text-xs cursor-pointer active:scale-95 transition-transform truncate">
+                    ${s.title}
+                </div>
+            `).join('') : '<p class="text-gray-300 text-xs text-center py-2">暫無課表</p>';
+        }
+
+        function renderWeekCalendar() {
+            const grid = document.getElementById('week-calendar-grid');
+            grid.innerHTML = "";
+            const today = new Date();
+            const start = new Date(today);
+            start.setDate(today.getDate() - today.getDay());
+            document.getElementById('current-month').innerText = `${start.getMonth() + 1}月`;
+            
+            const days = ['日', '一', '二', '三', '四', '五', '六'];
+            for (let i = 0; i < 7; i++) {
+                const d = new Date(start);
+                d.setDate(start.getDate() + i);
+                const dateStr = d.toISOString().split('T')[0];
+                const isToday = d.toDateString() === today.toDateString();
+                
+                const hasTeam = teamSessions.some(s => s.date === dateStr);
+                const hasMatch = matches.some(m => m.date === dateStr);
+
+                let bgClass = "";
+                if (hasTeam && hasMatch) bgClass = "cal-bg-both";
+                else if (hasTeam) bgClass = "cal-bg-team";
+                else if (hasMatch) bgClass = "cal-bg-match";
+
+                grid.innerHTML += `
+                    <div class="flex flex-col items-center justify-center p-2 rounded-lg relative overflow-hidden ${isToday ? 'ring-2 ring-primary ring-inset' : ''} ${bgClass}">
+                        <span class="text-[9px] uppercase z-10 ${isToday ? 'font-bold' : 'opacity-70'}">${days[i]}</span>
+                        <span class="text-xs font-bold z-10">${d.getDate()}</span>
+                    </div>
+                `;
+            }
+        }
+
+        window.deleteItem = (type, id) => {
+            if (type === 'team') teamSessions = teamSessions.filter(i => i.id !== id);
+            if (type === 'match') matches = matches.filter(i => i.id !== id);
+            if (type === 'self') selfTrainingLogs = selfTrainingLogs.filter(i => i.id !== id);
+            saveData();
+        };
+    </script>
+</body>
+</html>
